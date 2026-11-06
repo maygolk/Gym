@@ -200,6 +200,7 @@ def prepare_target(
     registry_credentials: Mapping[str, tuple[str, str]] | None = None,
     agent: str | None = None,
     allow_unsupported_pairing: bool = False,
+    task_env: Mapping[str, str] | None = None,
 ) -> PreparedTaskset:
     """Fetch (for hub references) and load the tasks, then write the rows file.
 
@@ -247,6 +248,9 @@ def prepare_target(
     not enter the dataset digest; the loader refuses it, so it is skipped like any task that does not load,
     and selection applies to it as to any other task.
 
+    ``task_env`` replaces declared task environment entries before materialization.
+    The server must receive the same mapping at seed; the applied values enter the task digest.
+
     ``agent`` is the harness the run selected (its implementation name, what ``--agent`` resolves to). It is
     checked against the dataset's ``[gym] allowed_agents`` as soon as ``dataset.toml`` is at hand, after a
     hub fetch and before any manifest check, image record, build or server start; a harness the dataset does
@@ -258,6 +262,9 @@ def prepare_target(
     point whatever the harness, before anything is written: that type marks committed smoke-test samples,
     which neither ``gym eval run`` nor ``gym dataset validate`` runs.
     """
+    if task_env and compose_overlay and compose_overlay.files:
+        raise ValueError("task_env overrides cannot be combined with Compose overlay files")
+
     build = build or BuildOptions()
     entry: DatasetEntry | None = None
     if is_hub_ref(target):
@@ -356,7 +363,7 @@ def prepare_target(
     output_dir.mkdir(parents=True, exist_ok=True)
     errors: dict[str, HarborTaskError] = {}
     try:
-        loaded = discover_tasks(folder, skipped=errors)
+        loaded = discover_tasks(folder, skipped=errors, task_env=task_env)
     except HarborTaskError:
         if not unbuilt:
             # Keep the omitted IDs and reasons even when no task in the dataset loads.

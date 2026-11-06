@@ -1,0 +1,14 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-License-Identifier: Apache-2.0
+[dataset]
+name = "pare/gym-fm"
+version = "0.1.0"
+
+[gym]
+type = "benchmark"
+domain = "coding"
+verified = false
+allowed_agents = ["codex_agent"]
+
+[gym.defaults]
+num_repeats = 1

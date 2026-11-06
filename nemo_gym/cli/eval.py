@@ -1347,6 +1347,22 @@ SANDBOX_PROVIDER_OPTIONS_KEY = f"{HARBOR_SERVER_KEY}.sandbox_provider_options"
 COMPOSE_OVERLAY_KEY = f"{HARBOR_SERVER_KEY}.compose_overlay"
 
 
+def task_env_from_overrides(overrides: list[str]) -> dict[str, str]:
+    """Read declared task environment overrides from the YAML stack used at seed.
+
+    Only this mapping is resolved; unrelated credentials are not needed to prepare it.
+    """
+    key = f"{HARBOR_SERVER_KEY}.task_env"
+    block = _block_from_overrides(overrides, key)
+    if block is None:
+        return {}
+    if not isinstance(block, dict) or any(
+        not isinstance(name, str) or not isinstance(value, str) for name, value in block.items()
+    ):
+        raise ValueError(f"`{key}` must be a mapping of variable names to strings")
+    return block
+
+
 def _block_provider_name(overrides: list[str], sandbox: str | None, block_key: str) -> str | None:
     """The provider name a top-level sandbox block carries, read from its keys alone (never its values)."""
     from omegaconf import OmegaConf
@@ -1568,6 +1584,7 @@ def run_target(args: argparse.Namespace, overrides: list[str]) -> None:
             gpu_shared_storage=gpu_shared_storage_from_overrides(overrides, sandbox),
             compose_overlay=compose_overlay_from_overrides(overrides),
             rows_name=_rows_name(agent),
+            task_env=task_env_from_overrides(overrides),
             registry_credentials=registry_credentials_from_overrides(overrides, sandbox),
             agent=agent.impl_name,
             allow_unsupported_pairing=pairing_override_from_overrides(overrides),
@@ -1817,6 +1834,7 @@ def validate_target(args: argparse.Namespace, overrides: list[str], *, agent: Ag
             gpu_shared_storage=gpu_shared_storage_from_overrides(overrides, sandbox),
             compose_overlay=compose_overlay_from_overrides(overrides),
             rows_name=_rows_name(agent),
+            task_env=task_env_from_overrides(overrides),
             registry_credentials=registry_credentials_from_overrides(overrides, sandbox),
         )
     except (

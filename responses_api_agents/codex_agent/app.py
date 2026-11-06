@@ -996,6 +996,9 @@ class CodexAgent(SimpleResponsesAPIAgent):
         base_url = self._resolve_call_base_url(invocation_id)
         config = self._build_config(base_url, developer_instructions=system, mcp_servers=mcp_servers or None)
         config["model_providers"]["gym"]["http_headers"] = {"x-session-id": invocation_id}
+        # Keep task tools' OPENAI_API_KEY intact for workflows that call another
+        # model, while outer Codex authenticates to Gym with its own variable.
+        config["model_providers"]["gym"]["env_key"] = "NEMO_GYM_CODEX_API_KEY"
         await state.upload_text("home/.codex/config.toml", toml_dumps(config))
         timeout = resolve_agent_timeout(body.metadata, ceiling=self.config.timeout)
         command = self._build_command("-", state.session.workdir)
@@ -1015,7 +1018,7 @@ class CodexAgent(SimpleResponsesAPIAgent):
             "env": {
                 "CODEX_HOME": f"{state.session.session_dir}/home/.codex",
                 # Gym receives the calls; never copy the direct OpenAI credential into this path.
-                "OPENAI_API_KEY": "gym",  # pragma: allowlist secret
+                "NEMO_GYM_CODEX_API_KEY": "gym",  # pragma: allowlist secret
             },
             "inherit_env": self.config.inherit_sandbox_environment,
             "raise_oom_score_adj": self.config.raise_oom_score_adj,

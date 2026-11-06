@@ -1554,15 +1554,24 @@ with a `prompt_template`.
 
 ## Where settings live
 
-Four homes, one owner each. A setting sits on this server's config only if every dataset on the same
-deployment wants the same value; a unit test pins that list.
+Four homes, one owner each. This server's config holds generic deployment settings and explicit run
+overrides; a unit test pins that list. Task requirements stay in task files, and dataset defaults stay
+in `dataset.toml`. Run overrides such as `task_env` select values for a run without rewriting those files.
 
 | Home | File | Owner | Holds |
 |---|---|---|---|
 | Task | `task.toml` | task author | image, resources, timeouts, env, verifier, agent user (read-only once fetched) |
 | Dataset | `dataset.toml`, `[gym]` table; `task_data.py` | dataset author | `[gym]` `license` (one of Gym's dataset license values, required for `train` and `validation`), `type` (`train`, `validation`, `example` or `benchmark`; unset means `validation` with a license, else `benchmark`), `allowed_agents` (harness implementation names the dataset admits; unset admits any), `domain` (one of Gym's domain values) and `verified` (boolean); `[gym.defaults]` `timeout_multiplier`, `resource_multiplier`, `num_repeats` (rollouts per task, below `+num_repeats=`); `[gym.tasks."<id>"]` `environment` and `verifier` overrides in Harbor's own fields (`env` merges, other fields replace) and `artifacts` additions appended to the task's own. `task_data.py`: the `TaskData` model every task's `task_data.json` fields are validated against (materialize, seed, collate) |
 | Deployment | the `sandbox:` provider block | operator | image rewrites and registry credentials (`images`), root setup commands (`setup`), networking, shared-memory labels, shared storage and `volume_sources` for Compose volumes |
-| Run | run config | the run | provider selection, GPU routing, repeats, output paths, `sandbox_resources_override` for parity runs, `compose_overlay` (the job's extra Compose files, MCP entries and prompt template) |
+| Run | run config | the run | provider selection, GPU routing, repeats, output paths, `sandbox_resources_override` for parity runs, `task_env` (overrides declared task environment entries and enters the effective task digest), `compose_overlay` (the job's extra Compose files, MCP entries and prompt template) |
 
 `gym dataset init <name>` writes a dataset in this shape, and `gym dataset validate <folder>` with no extra
 config is the test that a dataset is self-contained.
+
+## Runtime task environment presets
+
+Set `harbor_environment_server.environment_servers.harbor.task_env` in a YAML
+file passed with `--config` to replace declared `[environment.env]` entries.
+Applied values enter the task digest at preparation and seed; switching presets
+refuses stale resume rows. Unrelated keys are ignored. This supports tasks without
+Compose files or Compose overlay files and does not alter Docker build ARGs.
