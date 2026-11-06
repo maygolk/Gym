@@ -1,0 +1,11 @@
+# Generated image records; keep authored tasks and configuration in Git.
+compose-images.json
+compose-images.json.lock
+built-images.json
+built-images.json.lock
+**/compose-images.json
+**/compose-images.json.lock
+**/built-images.json
+**/built-images.json.lock
+__pycache__/
+*.pyc

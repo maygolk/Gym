@@ -395,13 +395,23 @@ def read_instruction(path: Path) -> str:
     return "\n".join(lines)
 
 
-def load_task(path: Path, *, root: Path | None = None, image_configs: Mapping[str, Any] | None = None) -> HarborTask:
+def load_task(
+    path: Path,
+    *,
+    root: Path | None = None,
+    image_configs: Mapping[str, Any] | None = None,
+    task_env: Mapping[str, str] | None = None,
+) -> HarborTask:
     """Read ``path`` as one task. Raises :class:`HarborTaskError` when it is not one.
 
     ``root`` is the dataset folder whose files shape the task (``dataset.toml`` and the recorded
     image configurations); it is the task's parent folder unless the task was discovered deeper.
     ``image_configs`` is that folder's recorded image configurations when the caller has read them
     already (``discover_tasks`` reads the shared file once); otherwise they are read here.
+    ``task_env`` replaces declared ``[environment.env]`` entries for this run. Applied
+    values enter the task digest so a different preset cannot reuse a cached result.
+    This is runtime-only and is refused for tasks with Compose files; it does not
+    override build arguments.
     """
     path = Path(path)
     if path.is_symlink():
@@ -433,6 +443,17 @@ def load_task(path: Path, *, root: Path | None = None, image_configs: Mapping[st
         config = apply_dataset_config(config, path.name, dataset)
     except ValueError as exc:
         raise HarborTaskError(str(exc)) from exc
+
+    # Apply only variables the task declares; unrelated settings must not change
+    # another task or its identity. Credentials can keep their host templates.
+    applied_env = {key: value for key, value in (task_env or {}).items() if key in config.environment.env}
+    if applied_env:
+        if has_compose_file(path):
+            raise HarborTaskError("task_env overrides are supported only for tasks without Compose files")
+        if any(not isinstance(value, str) for value in applied_env.values()):
+            raise HarborTaskError("task_env values must be strings")
+        environment = config.environment.model_copy(update={"env": config.environment.env | applied_env})
+        config = config.model_copy(update={"environment": environment})
 
     phases = {"environment": config.environment, "agent": config.agent, "verifier": config.verifier}
     if config.verifier.environment is not None:
@@ -722,6 +743,10 @@ def load_task(path: Path, *, root: Path | None = None, image_configs: Mapping[st
     except OSError as exc:
         raise HarborTaskError(f"{shared_verifier}: {exc}") from exc
     digest = task_digest(folder_digest, dataset, path.name, shared_verifier_digest=verifier_digest)
+    if applied_env:
+        digest = hashlib.sha256(
+            f"{digest}\n{json.dumps({'task_env': applied_env}, sort_keys=True)}".encode()
+        ).hexdigest()
     task_data = read_task_fields(path)
 
     return HarborTask(
@@ -1023,7 +1048,12 @@ def _resolve_turn_verifiers(
     return resolved
 
 
-def discover_tasks(root: Path, *, skipped: dict[str, HarborTaskError] | None = None) -> list[HarborTask]:
+def discover_tasks(
+    root: Path,
+    *,
+    skipped: dict[str, HarborTaskError] | None = None,
+    task_env: Mapping[str, str] | None = None,
+) -> list[HarborTask]:
     """A folder with ``task.toml`` is one task; otherwise its subfolders are searched for tasks.
 
     The search is recursive (see :func:`iter_task_folders`), so a dataset may group its tasks in
@@ -1032,13 +1062,14 @@ def discover_tasks(root: Path, *, skipped: dict[str, HarborTaskError] | None = N
 
     With ``skipped``, a child that fails to load is recorded there under its folder name
     and the others still load; without it the first failure raises. A root that is
-    itself a task always raises.
+    itself a task always raises. ``task_env`` is passed to each task load so the
+    same runtime preset shapes standalone and dataset targets.
     """
     root = Path(root).resolve()
     if not root.is_dir():
         raise HarborTaskError(f"{root} is not a directory")
     if is_task_folder(root):
-        return [load_task(root)]
+        return [load_task(root, task_env=task_env)]
     children = iter_task_folders(root)
     if not children:
         raise HarborTaskError(f"{root} is neither a task folder nor a folder of task folders (no {TASK_FILE} found)")
@@ -1049,11 +1080,11 @@ def discover_tasks(root: Path, *, skipped: dict[str, HarborTaskError] | None = N
     except HarborTaskError:
         image_configs = None
     if skipped is None:
-        return [load_task(child, root=root, image_configs=image_configs) for child in children]
+        return [load_task(child, root=root, image_configs=image_configs, task_env=task_env) for child in children]
     tasks: list[HarborTask] = []
     for child in children:
         try:
-            tasks.append(load_task(child, root=root, image_configs=image_configs))
+            tasks.append(load_task(child, root=root, image_configs=image_configs, task_env=task_env))
         except HarborTaskError as exc:
             skipped[child.name] = exc
     if not tasks:

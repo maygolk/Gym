@@ -337,6 +337,10 @@ class HarborEnvironmentServerConfig(BaseEnvironmentServerConfig):
     # Whether a failed agent response the harness classified is verified, retried or failed ungraded.
     agent_outcome_policy: AgentOutcomePolicyConfig = Field(default_factory=AgentOutcomePolicyConfig)
     tasksets: dict[str, HarborTasksetConfig] = Field(default_factory=dict)
+    # Run-specific values for declared [environment.env] entries. Preparation and
+    # seed apply the same mapping and include it in each affected task's digest.
+    # Single-sandbox tasks only; this does not override Docker build arguments.
+    task_env: dict[str, str] = Field(default_factory=dict)
     # Name of the top-level sandbox provider block in the merged config.
     sandbox_provider: str = "sandbox"
     sandbox_ready_timeout_s: float = Field(default=900, gt=0)
@@ -648,7 +652,9 @@ class HarborEnvironmentServer(
                 sidecar = root / name
                 if sidecar.is_file():
                     shutil.copy2(sidecar, snapshot_root / name)
-            task = load_task(snapshot)
+            if self.config.task_env and self.config.compose_overlay and self.config.compose_overlay.files:
+                raise HTTPException(422, "task_env overrides cannot be combined with Compose overlay files")
+            task = load_task(snapshot, task_env=self.config.task_env)
             if task.digest != expected:
                 raise HTTPException(
                     409, f"Task folder {folder} changed since materialization; re-materialize the taskset"

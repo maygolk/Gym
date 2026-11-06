@@ -1620,7 +1620,9 @@ def test_instructions_and_text_parts_reach_codex_without_other_provider_credenti
         config = tomllib.loads(sandbox.files[f"{sandbox.directory}/home/.codex/config.toml"])
         assert config["developer_instructions"] == "config instruction\n\nrequest instruction\n\ninput instruction"
         assert payload["prompt"] == "task"
-        assert payload["env"]["OPENAI_API_KEY"] == "gym"
+        assert payload["env"]["NEMO_GYM_CODEX_API_KEY"] == "gym"
+        assert "OPENAI_API_KEY" not in payload["env"]
+        assert config["model_providers"]["gym"]["env_key"] == "NEMO_GYM_CODEX_API_KEY"
         assert "must-not-copy" not in json.dumps(sandbox.files)
         closed = client.post("/v1/agent_sessions/close", json=close_body(session_id))
         conversation = closed.json()["agent_observations"]["records"][0]["conversation"]
@@ -3062,7 +3064,7 @@ def test_sandbox_environment_inheritance_is_opt_in(setup, inherit) -> None:
     # HOME and the XDG directories come from the sandbox either way; only CODEX_HOME is private.
     assert payload["env"] == {
         "CODEX_HOME": f"{sandbox.directory}/home/.codex",
-        "OPENAI_API_KEY": "gym",  # pragma: allowlist secret
+        "NEMO_GYM_CODEX_API_KEY": "gym",  # pragma: allowlist secret
     }
 
 

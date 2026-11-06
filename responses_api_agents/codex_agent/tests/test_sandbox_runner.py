@@ -169,16 +169,21 @@ def test_runtime_environment_does_not_inherit_provider_credentials(tmp_path, mon
 
 def test_inherited_environment_is_opt_in_and_keeps_explicit_values(tmp_path, monkeypatch):
     monkeypatch.setenv("TASK_VARIABLE", "from-task-image")
+    monkeypatch.setenv("OPENAI_API_KEY", "inner-synthetic")
     monkeypatch.setenv("HOME", "/root")
     code = (
         "import os,json; print(json.dumps({key: os.environ.get(key) "
-        "for key in ('TASK_VARIABLE', 'HOME', 'CODEX_HOME', 'PATH')}))"
+        "for key in ('TASK_VARIABLE', 'HOME', 'CODEX_HOME', 'PATH', 'OPENAI_API_KEY', 'NEMO_GYM_CODEX_API_KEY')}))"
     )
-    process = launch(tmp_path, code, inherit_env=True, env={"CODEX_HOME": "/tmp/session/.codex"})
+    process = launch(
+        tmp_path, code, inherit_env=True, env={"CODEX_HOME": "/tmp/session/.codex", "NEMO_GYM_CODEX_API_KEY": "gym"}
+    )
     assert result(tmp_path, process)["cleanup_confirmed"]
     _, event = json.loads((tmp_path / "events.jsonl").read_text())
     assert event == {
         "TASK_VARIABLE": "from-task-image",
+        "OPENAI_API_KEY": "inner-synthetic",
+        "NEMO_GYM_CODEX_API_KEY": "gym",
         "HOME": "/root",
         "CODEX_HOME": "/tmp/session/.codex",
         "PATH": os.environ["PATH"],

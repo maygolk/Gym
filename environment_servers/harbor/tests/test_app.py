@@ -310,9 +310,9 @@ class TestEpisode:
         loads: list[Path] = []
         real_load_task = load_task
 
-        def counting_load_task(folder):
+        def counting_load_task(folder, *, task_env=None):
             loads.append(Path(folder))
-            return real_load_task(folder)
+            return real_load_task(folder, task_env=task_env)
 
         monkeypatch.setattr("environment_servers.harbor.app.load_task", counting_load_task)
 
@@ -3967,17 +3967,20 @@ GREETING = "hi"
         assert server._agent_implementation() is None
 
 
-def test_server_config_holds_only_deployment_settings():
-    """A setting belongs here only if every dataset on the same deployment wants the same value.
+def test_server_config_holds_deployment_settings_and_explicit_run_overrides():
+    """Keep server settings generic: deployment policy and explicit run overrides.
 
     Task facts stay in task.toml, dataset settings in dataset.toml's [gym] table, image mirrors and
-    setup commands in the sandbox provider. Adding a field means changing this set in the same PR.
+    setup commands in the sandbox provider. The task_env run override is applied during preparation
+    and snapshot loading and enters the effective task digest; it is not a hidden benchmark default.
+    Adding a field means changing this set in the same PR.
     """
     own = set(HarborEnvironmentServerConfig.model_fields) - set(BaseEnvironmentServerConfig.model_fields)
     assert own == {
         "agent_server",
         "agent_outcome_policy",
         "tasksets",
+        "task_env",
         "sandbox_provider",
         "sandbox_ready_timeout_s",
         "sandbox_ttl_slack_s",

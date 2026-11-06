@@ -1,0 +1,41 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-License-Identifier: Apache-2.0
+# Outer coding agent: Codex/Sol. The inner harness is selected under task_env below.
+policy_model_name: openai/openai/gpt-6.1-sol
+policy_base_url: https://inference-api.nvidia.com/v1
+policy_api_key: ${oc.env:NGC_INFERENCE_API_KEY}
+policy_model:
+  responses_api_models:
+    vllm_model:
+      entrypoint: app.py
+      base_url: ${policy_base_url}
+      api_key: ${policy_api_key}
+      model: ${policy_model_name}
+      is_responses_native: true
+      uses_reasoning_parser: false
+      return_token_id_information: false
+codex_agent:
+  responses_api_agents:
+    codex_agent:
+      timeout: 1200
+      reasoning_effort: high
+      model_server_forwards_reasoning_effort: true
+      inherit_sandbox_environment: true
+      sandbox_logs_dir: /logs/agent
+      verify_after_agent_error: true
+
+# FM02 container and inner-harness settings.
+builds:
+  tool: docker
+harbor_environment_server:
+  environment_servers:
+    harbor:
+      sandbox_provider_options:
+        # Supply a fresh volume name for each run; remove it after Gym stops.
+        # Older Docker daemons reject read-only anonymous volumes.
+        run_args:
+          - "--mount"
+          - "type=volume,src=${oc.env:PARE_FM02_FIXTURE_VOLUME},dst=/opt/gym-fixture,readonly"
+      task_env:
+        GYM_AGENT: claude_code_agent
+        GYM_MODEL: aws/anthropic/bedrock-claude-haiku-5-5
